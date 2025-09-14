@@ -1,3 +1,4 @@
+import os
 import asyncio
 import websockets
 
@@ -21,8 +22,9 @@ async def handler(websocket):
         await websocket.send(reply)
 
 async def main():
-    async with websockets.serve(handler, "0.0.0.0", 10000):  # Render uses dynamic ports
-        print("Brain is running...")
+    PORT = int(os.environ.get("PORT", 10000))  # Get port from environment
+    async with websockets.serve(handler, "0.0.0.0", PORT):
+        print(f"Brain is running on port {PORT}...")
         await asyncio.Future()  # run forever
 
 asyncio.run(main())
