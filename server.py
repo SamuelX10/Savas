@@ -2,23 +2,22 @@ import os
 import asyncio
 import websockets
 from openai import OpenAI
-import functools
 
 # ================= WebSocket clients =================
 connected_clients = set()
 
-# ================= Async GPT call =================
+# ================= GPT-3.5 call =================
 async def gpt_response(message: str) -> str:
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return "⚠️ GPT API key not set!"
 
     try:
-        # Use asyncio.to_thread to run blocking OpenAI call without freezing the loop
+        # Run GPT in a separate thread to avoid blocking WebSocket loop
         def blocking_call():
             client = OpenAI(api_key=api_key)
             response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-3.5-turbo",  # switched to GPT-3.5
                 messages=[
                     {"role": "system", "content": "You are Savas Brain, a helpful AI assistant."},
                     {"role": "user", "content": message}
@@ -33,10 +32,11 @@ async def gpt_response(message: str) -> str:
 
 # ================= Brain logic =================
 async def process_message(message: str) -> str:
-    # Test shortcut
+    # ✅ Test shortcut — never calls GPT
     if message.lower() == "test":
         return "🧪 Test successful! WebSocket is working."
-    # GPT response for other messages
+
+    # All other messages go to GPT-3.5
     return await gpt_response(message)
 
 # ================= WebSocket handler =================
