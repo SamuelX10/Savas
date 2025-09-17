@@ -1,2 +1,4 @@
 websockets==12.0
+httpx
+apscheduler
 requests>=2.31.0
