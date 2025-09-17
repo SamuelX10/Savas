@@ -1,4 +1,5 @@
 import os
+import openai
 import asyncio
 import websockets
 import httpx
@@ -51,7 +52,6 @@ def initialize_logic():
 async def start_server():
     PORT = int(os.environ.get("PORT", 10000))
     async with websockets.serve(handler, "0.0.0.0", PORT):
-        print(f"🧠 Brain with Scheduler running on port {PORT}...")
         await asyncio.Future()
 
 
@@ -110,8 +110,17 @@ async def call_self():
 
 
 # ================== MESSAGE HANDLER ==================
+openai_respond = lambda msg: openai.ChatCompletion.acreate(
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": msg}]
+)
+
 async def process_message(message: str) -> str:
-    return f"echo: {message}"
+    try:
+        response = await openai_respond(message)
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        return f"OpenAI error: {str(e)}"
 
 
 # ================== WEBSOCKET HANDLER ==================
@@ -129,6 +138,7 @@ async def handler(websocket):
             await websocket.send(reply)
     finally:
         connected_clients.discard(websocket)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
