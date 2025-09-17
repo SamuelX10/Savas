@@ -1,36 +1,18 @@
 import os
 import asyncio
 import websockets
-from openai import OpenAI
 
 # ================= WebSocket clients =================
-connected_clients = set()  # Track connected clients
+connected_clients = set()
 
 # ================= Brain logic =================
 async def process_message(message: str) -> str:
-    # ---------- TEST SHORTCUT ----------
+    # ✅ Test shortcut
     if message.lower() == "test":
         return "🧪 Test successful! WebSocket is working."
-
-    # ---------- CHECK API KEY ----------
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return "⚠️ GPT API key not set!"
-
-    # ---------- GPT RESPONSE ----------
-    try:
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # safer for free/trial accounts
-            messages=[
-                {"role": "system", "content": "You are Savas Brain, a helpful AI assistant."},
-                {"role": "user", "content": message}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"⚠️ GPT Error: {str(e)}"
-
+    
+    # Echo everything else
+    return f"Echo: {message}"
 
 # ================= WebSocket handler =================
 async def handler(websocket):
