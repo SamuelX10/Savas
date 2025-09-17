@@ -1,61 +1,46 @@
 import os
 import asyncio
 import websockets
-from openai import OpenAI
-
-# ================= Temporary API Key for Testing =================
-# ⚠️⚠️⚠️ DANGER ZONE! REMOVE THIS LINE BEFORE DEPLOYMENT! ⚠️⚠️⚠️
-# Use this only for quick debugging. Uncomment the line below and paste your key.
-# temp_api_key = "YOUR_OPENAI_API_KEY_GOES_HERE" 
+import requests
 
 # ================= WebSocket clients =================
 connected_clients = set()
 
-# ================= GPT-3.5 call =================
-async def gpt_response(message: str) -> str:
-    """Handles the API call to OpenAI's GPT-3.5 model."""
-    # Use the temporary key if it's set, otherwise use the environment variable
-    api_key = os.environ.get("OPENAI_API_KEY")
-    # If you uncommented the temporary key, it will override the environment variable
-    # if 'temp_api_key' in locals():
-    #     api_key = temp_api_key
-    
-    # We still keep the original check to be safe
-    if not api_key:
-        return "⚠️ GPT API key not set!"
-
+# ================= Test API call =================
+async def test_api_response(message: str) -> str:
+    """Handles a simple API call to a test endpoint."""
     try:
+        # Use asyncio.to_thread to run a synchronous requests call in a separate thread
         def blocking_call():
-            client = OpenAI(api_key=api_key)
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are Savas Brain, a helpful AI assistant."},
-                    {"role": "user", "content": message}
-                ]
-            )
-            return response.choices[0].message.content.strip()
+            # A simple public API that returns a list of posts. We get the first one.
+            response = requests.get("https://jsonplaceholder.typicode.com/posts/1")
+            response.raise_for_status()  # Raise an exception for bad status codes
+            
+            # We will return the title of the post as a test response
+            data = response.json()
+            return f"✅ Test API Response: {data.get('title')}"
 
         return await asyncio.to_thread(blocking_call)
 
+    except requests.exceptions.RequestException as e:
+        print(f"Test API call failed with a new error: {e}")
+        return f"⚠️ Test API Error: {str(e)}"
     except Exception as e:
-        print(f"GPT API call failed with a new error: {e}")
-        return f"⚠️ GPT Error: {str(e)}"
+        print(f"Unexpected error in test_api_response: {e}")
+        return f"⚠️ Unexpected Error: {str(e)}"
 
 # ================= Brain logic =================
 async def process_message(message: str) -> str:
     """Processes incoming messages and determines the appropriate response."""
-    # We put everything in a try...except block to catch anything unexpected
     try:
         # ✅ Test shortcut — still using .strip() for robust handling of spaces.
         if isinstance(message, str) and message.strip().lower() == "test":
             return "🧪 Test successful! WebSocket is working."
 
-        # All other messages go to GPT-3.5
-        return await gpt_response(message)
+        # All other messages go to the new test API
+        return await test_api_response(message)
         
     except Exception as e:
-        # If any unexpected error happens in this logic, we will catch it here
         print(f"Error in process_message: {e}")
         return f"⚠️ Unexpected Error: {str(e)}"
 
