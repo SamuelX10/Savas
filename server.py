@@ -8,9 +8,7 @@ async def handler(websocket, path):
         if message.strip().lower() == "test":
             api_key = os.getenv("OPENAI_API_KEY", "NOT FOUND")
             response = f"🔑 API Key from env: {api_key}"
-        else:
-            response = f"echo: {message}"
-
+        
         await websocket.send(response)
 
 async def main():
