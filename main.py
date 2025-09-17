@@ -13,6 +13,12 @@ pending_messages = []  # missed messages when no client is online
 routine_pairs = []     # store routines as [("08:00", "Morning News"), ...]
 
 
+openai_respond = lambda msg: asyncio.to_thread(
+    openai.chat.completions.create,
+    model="gpt-3.5-turbo",
+    messages=[{"role": "user", "content": msg}]
+)
+
 # ================== MAIN ==================
 async def main():
     initialize_variables()
@@ -110,19 +116,12 @@ async def call_self():
 
 
 # ================== MESSAGE HANDLER ==================
-    openai_respond = lambda msg: asyncio.to_thread(
-    openai.chat.completions.create,
-    model="gpt-3.5-turbo",
-    messages=[{"role": "user", "content": msg}]
-)
-
 async def process_message(message: str) -> str:
     try:
         response = await openai_respond(message)
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"OpenAI error: {str(e)}"
-
 
 
 # ================== WEBSOCKET HANDLER ==================
