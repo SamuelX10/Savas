@@ -110,7 +110,8 @@ async def call_self():
 
 
 # ================== MESSAGE HANDLER ==================
-openai_respond = lambda msg: openai.ChatCompletion.acreate(
+    openai_respond = lambda msg: asyncio.to_thread(
+    openai.chat.completions.create,
     model="gpt-3.5-turbo",
     messages=[{"role": "user", "content": msg}]
 )
@@ -121,6 +122,7 @@ async def process_message(message: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"OpenAI error: {str(e)}"
+
 
 
 # ================== WEBSOCKET HANDLER ==================
