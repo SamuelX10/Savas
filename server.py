@@ -12,25 +12,7 @@ async def process_message(message: str) -> str:
     if message.lower() == "test":
         return "🧪 Test successful! WebSocket is working."
 
-    # ---------- CHECK API KEY ----------
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        return "⚠️ GPT API key not set!"
-
-    # ---------- GPT RESPONSE ----------
-    try:
-        client = OpenAI(api_key=api_key)
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",  # safer for free/trial accounts
-            messages=[
-                {"role": "system", "content": "You are Savas Brain, a helpful AI assistant."},
-                {"role": "user", "content": message}
-            ]
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        return f"⚠️ GPT Error: {str(e)}"
-
+    
 # ================= WebSocket handler =================
 async def handler(websocket):
     connected_clients.add(websocket)
