@@ -1,9 +1,6 @@
 import os
 import asyncio
 import websockets
-import json
-
-PORT = 8000
 
 async def handler(websocket, path):
     async for message in websocket:
@@ -18,6 +15,8 @@ async def handler(websocket, path):
         await websocket.send(response)
 
 async def main():
+    # ✅ Use Render's dynamic port
+    PORT = int(os.environ.get("PORT", 10000))  
     async with websockets.serve(handler, "0.0.0.0", PORT):
         print(f"✅ WebSocket server running on ws://0.0.0.0:{PORT}")
         await asyncio.Future()  # Run forever
