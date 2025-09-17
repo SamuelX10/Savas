@@ -1,9 +1,9 @@
 import os
 import asyncio
 import websockets
-import requests
+import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # ================== GLOBALS ==================
 scheduler = None
@@ -36,13 +36,16 @@ def initialize_logic():
     # Start the scheduler
     scheduler.start()
 
- # Self-calling job every 13 minutes
+    # Self-calling job every 13 minutes
     scheduler.add_job(call_self, "interval", minutes=13)
     
     # Load routines into scheduler
     for time_str, task in routine_pairs:
         hour, minute = map(int, time_str.split(":"))
-        scheduler.add_job(scheduled_task, "cron", hour=hour, minute=minute, args=[task])
+        if task == "Morning News":
+            scheduler.add_job(fetch_news, "cron", hour=hour, minute=minute)
+        else:
+            scheduler.add_job(scheduled_task, "cron", hour=hour, minute=minute, args=[task])
 
 
 async def start_server():
@@ -60,18 +63,18 @@ async def broadcast(message: str, store_if_offline=False):
             try:
                 await ws.send(message)
             except:
-                connected_clients.remove(ws)
+                connected_clients.discard(ws)
     elif store_if_offline:
         pending_messages.append(message)
 
 
 # ================== FETCH NEWS ==================
-def fetch_news():
-    await broadcast(store_if_offline=True)
-    
+async def fetch_news():
     news_api_key = os.environ.get("NEWS_API_KEY")
     if not news_api_key:
-        return "⚠️ NEWS_API_KEY not set!"
+        msg = "⚠️ NEWS_API_KEY not set!"
+        await broadcast(msg, store_if_offline=True)
+        return
 
     url = "https://newsapi.org/v2/top-headlines"
     params = {
@@ -81,18 +84,20 @@ def fetch_news():
     }
 
     try:
-        response = requests.get(url, params=params, timeout=10)
-        response.raise_for_status()
-        articles = response.json().get("articles", [])
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            articles = response.json().get("articles", [])
 
         if not articles:
-            return "⚠️ No news found today."
-
-        headlines = [f"- {a['title']}" for a in articles[:3]]
-        return "📰 Morning News:\n" + "\n".join(headlines)
-
+            msg = "⚠️ No news found today."
+        else:
+            headlines = [f"- {a['title']}" for a in articles[:3]]
+            msg = "📰 Morning News:\n" + "\n".join(headlines)
     except Exception as e:
-        return f"⚠️ News fetch error: {str(e)}"
+        msg = f"⚠️ News fetch error: {str(e)}"
+    
+    await broadcast(msg, store_if_offline=True)
         
 
 async def scheduled_task(message: str):
@@ -106,7 +111,6 @@ async def call_self():
 
 # ================== MESSAGE HANDLER ==================
 async def process_message(message: str) -> str:
-    
     return f"echo: {message}"
 
 
@@ -124,7 +128,7 @@ async def handler(websocket):
             reply = await process_message(message)
             await websocket.send(reply)
     finally:
-        connected_clients.remove(websocket)
+        connected_clients.discard(websocket)
 
 if __name__ == "__main__":
     asyncio.run(main())
