@@ -8,9 +8,13 @@ client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # ================= Brain logic using GPT =================
 async def process_message(message: str) -> str:
+    # ✅ Test shortcut
+    if message.lower() == "test":
+        return "🧪 Test successful! WebSocket is working."
+    
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",  # or gpt-3.5-turbo for cheaper
+            model="gpt-4o-mini",  # or gpt-3.5-turbo
             messages=[
                 {"role": "system", "content": "You are Savas Brain, a helpful AI assistant."},
                 {"role": "user", "content": message}
