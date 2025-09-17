@@ -4,8 +4,7 @@ import websockets
 
 async def handler(websocket, path):
     async for message in websocket:
-        print(f"📩 Received: {message}")
-
+        
         if message.strip().lower() == "test":
             api_key = os.getenv("OPENAI_API_KEY", "NOT FOUND")
             response = f"🔑 API Key from env: {api_key}"
