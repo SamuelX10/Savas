@@ -1,4 +1,8 @@
 import os
+import os
+import requests
+from flask import Flask, request, jsonify
+from dotenv import load_dotenv
 import asyncio
 import websockets
 import httpx
@@ -159,6 +163,47 @@ async def handler(websocket):
             await websocket.send(reply)
     finally:
         connected_clients.discard(websocket)
+
+
+
+
+load_dotenv()
+
+app = Flask(__name__)
+
+CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI")  # "https://savas.rf.gd/redirect"
+
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+
+@app.route("/exchange_code", methods=["POST"])
+def exchange_code():
+    data = request.json
+    code = data.get("code")
+    if not code:
+        return jsonify({"error": "No code provided"}), 400
+
+    payload = {
+        "code": code,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+
+    try:
+        resp = requests.post(TOKEN_URL, data=payload)
+        resp.raise_for_status()
+        tokens = resp.json()
+        # ✅ store refresh token securely (database or file)
+        print("Refresh token:", tokens.get("refresh_token"))
+        return jsonify(tokens)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
 
 if __name__ == "__main__":
     asyncio.run(main())
