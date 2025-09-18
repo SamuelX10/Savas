@@ -1,5 +1,4 @@
 import os
-import openai
 import asyncio
 import websockets
 import httpx
@@ -12,11 +11,26 @@ connected_clients = set()
 pending_messages = []  # missed messages when no client is online
 routine_pairs = []     # store routines as [("08:00", "Morning News"), ...]
 
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "llama3-8b-8192"  # You can change to other available models
 
-openai_respond = lambda msg: asyncio.to_thread(
-    openai.chat.completions.create,
-    model="gpt-3.5-turbo",
-    messages=[{"role": "user", "content": msg}]
+headers = {
+    "Authorization": f"Bearer {GROQ_API_KEY}",
+    "Content-Type": "application/json"
+}
+
+# Lambda for Groq API chat completion
+groq_respond = lambda msg: asyncio.to_thread(
+    lambda: httpx.post(
+        GROQ_API_URL,
+        headers=headers,
+        json={
+            "model": GROQ_MODEL,
+            "messages": [{"role": "user", "content": msg}]
+        },
+        timeout=30
+    )
 )
 
 # ================== MAIN ==================
@@ -118,10 +132,12 @@ async def call_self():
 # ================== MESSAGE HANDLER ==================
 async def process_message(message: str) -> str:
     try:
-        response = await openai_respond(message)
-        return response.choices[0].message.content.strip()
+        response = await groq_respond(message)
+        response = await response  # Await asyncio.to_thread result
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
-        return f"OpenAI error: {str(e)}"
+        return f"Groq error: {str(e)}"
 
 
 # ================== WEBSOCKET HANDLER ==================
