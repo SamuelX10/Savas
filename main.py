@@ -133,12 +133,10 @@ async def call_self():
 async def process_message(message: str) -> str:
     try:
         response = await groq_respond(message)
-        response = await response  # Await asyncio.to_thread result
         data = response.json()
         return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         return f"Groq error: {str(e)}"
-
 
 # ================== WEBSOCKET HANDLER ==================
 async def handler(websocket):
