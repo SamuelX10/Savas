@@ -5,30 +5,37 @@ import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from datetime import datetime
 
-# ================== GLOBALS ==================
+# ================== GLOBAL VARIABLES ==================
 scheduler = None
 connected_clients = set()
-pending_messages = []  # missed messages when no client is online
-routine_pairs = []     # store routines as [("08:00", "Morning News"), ...]
+pending_messages = []
+routine_pairs = []     
+assistant_tools []
 
+# ================== GROQ VARIABLES ==================
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "groq/compound"  # You can change to other available models
+GROQ_MODEL = "groq/compound"  
 
 headers = {
     "Authorization": f"Bearer {GROQ_API_KEY}",
     "Content-Type": "application/json"
 }
 
-# Lambda for Groq API chat completion
 groq_respond = lambda msg: asyncio.to_thread(
     lambda: httpx.post(
         GROQ_API_URL,
         headers=headers,
         json={
             "model": GROQ_MODEL,
-            "messages": [{"role": "user", "content": msg}]
+            "messages": [{"role": "assistant", "content": msg}]
         },
+        temperature=1,
+    max_completion_tokens=1024,
+    top_p=1,
+    stream=True,
+    stop=None,
+    compound_custom={"tools":{"enabled_tools":["browser_automation","web_search","code_interpreter","visit_website"]}}
         timeout=30
     )
 )
@@ -42,31 +49,41 @@ async def main():
 
 # ================== INITIALIZATION ==================
 def initialize_variables():
-    global scheduler, routine_pairs
+    global scheduler, 
+    routine_pairs, 
+    assistant_tools
+    
     scheduler = AsyncIOScheduler()
 
+    assistant_tools = {
+    "news": fetch_news,
+    "music": fetch_music,
+    }
+    
     # Example routine pairs (time, task)
     routine_pairs = [
-        ("08:00", "Morning News"),
-        ("13:00", "Lunch Reminder"),
-        ("20:00", "Night Reflection"),
-    ]
+    ("05:00", "news"),
+    ("13:00", "reminder", "Lunch Reminder"),
+    ("20:00", "reminder", "Night Reflection"),
+    ("15:00", "music")
+]
 
 
 def initialize_logic():
-    # Start the scheduler
     scheduler.start()
-
-    # Self-calling job every 13 minutes
     scheduler.add_job(call_self, "interval", minutes=13)
-    
-    # Load routines into scheduler
-    for time_str, task in routine_pairs:
-        hour, minute = map(int, time_str.split(":"))
-        if task == "Morning News":
-            scheduler.add_job(fetch_news, "cron", hour=hour, minute=minute)
+  
+    for routine in routine_pairs:
+        hour, minute = map(int, routine[0].split(":"))
+        tool_key = routine[1]
+        tool_func = assistant_tools.get(tool_key)
+        if not tool_func:
+            continue  # or log error
+        if len(routine) > 2:
+            # pass extra argument(s) if needed
+            scheduler.add_job(tool_func, "cron", hour=hour, minute=minute, args=[routine[2]])
         else:
-            scheduler.add_job(scheduled_task, "cron", hour=hour, minute=minute, args=[task])
+            scheduler.add_job(tool_func, "cron", hour=hour, minute=minute)
 
 
 async def start_server():
@@ -75,7 +92,7 @@ async def start_server():
         await asyncio.Future()
 
 
-# ================== HELPERS ==================
+# ================== HELPER METHODS ==================
 async def broadcast(message: str, store_if_offline=False):
     """Send a message to all connected clients, or store if none are online."""
     if connected_clients:
@@ -87,38 +104,6 @@ async def broadcast(message: str, store_if_offline=False):
     elif store_if_offline:
         pending_messages.append(message)
 
-
-# ================== FETCH NEWS ==================
-async def fetch_news():
-    news_api_key = os.environ.get("NEWS_API_KEY")
-    if not news_api_key:
-        msg = "⚠️ NEWS_API_KEY not set!"
-        await broadcast(msg, store_if_offline=True)
-        return
-
-    url = "https://newsapi.org/v2/top-headlines"
-    params = {
-        "country": "ng",   
-        "pageSize": 3,
-        "apiKey": news_api_key
-    }
-
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(url, params=params)
-            response.raise_for_status()
-            articles = response.json().get("articles", [])
-
-        if not articles:
-            msg = "⚠️ No news found today."
-        else:
-            headlines = [f"- {a['title']}" for a in articles[:3]]
-            msg = "📰 Morning News:\n" + "\n".join(headlines)
-    except Exception as e:
-        msg = f"⚠️ News fetch error: {str(e)}"
-    
-    await broadcast(msg, store_if_offline=True)
-    
 
 async def call_self():
     web_socket_url = os.environ.get("WEB_SOCKET_URL")
@@ -133,7 +118,6 @@ async def call_self():
     await broadcast(f"⏰ Reminder: {message}")
 
 
-# ================== MESSAGE HANDLER ==================
 async def process_message(message: str) -> str:
     try:
         response = await groq_respond(message)
@@ -158,6 +142,42 @@ async def handler(websocket):
             await websocket.send(reply)
     finally:
         connected_clients.discard(websocket)
+
+
+# ================== ASSISTANT TOOLS ==================
+async def fetch_music():
+    await broadcast("🎵 Time for music!")
+
+    
+    async def fetch_news():
+    news_api_key = os.environ.get("NEWS_API_KEY")
+    if not news_api_key:
+        msg = "NEWS_API_KEY not declared!"
+        await broadcast(msg, store_if_offline=True)
+        return
+
+    url = "https://newsapi.org/v2/top-headlines"
+    params = {
+        "country": "ng",   
+        "pageSize": 3,
+        "apiKey": news_api_key
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            articles = response.json().get("articles", [])
+
+        if not articles:
+            msg = "No news found today."
+        else:
+            headlines = [f"- {a['title']}" for a in articles[:3]]
+            msg = "Morning News:\n" + "\n".join(headlines)
+    except Exception as e:
+        msg = f"News fetch error: {str(e)}"
+    
+    await broadcast(msg, store_if_offline=True)
 
 
 if __name__ == "__main__":
