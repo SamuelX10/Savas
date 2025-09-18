@@ -138,6 +138,7 @@ async def process_message(message: str) -> str:
     except Exception as e:
         return f"Groq error: {str(e)}"
 
+
 # ================== WEBSOCKET HANDLER ==================
 async def handler(websocket):
     connected_clients.add(websocket)
