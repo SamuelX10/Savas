@@ -63,7 +63,9 @@ groq_respond = lambda msg: asyncio.to_thread(
         json={
             "model": GROQ_MODEL,
             "messages": [{"role": "user", "content": msg}],
-            "compound_custom": {"tools": {"enabled_tools": ["browser_automation", "web_search", "code_interpreter", "visit_website"]}}
+            "temperature": 1,
+            "max_tokens": 1024,
+            "top_p": 1,
         },
         timeout=30
     )
