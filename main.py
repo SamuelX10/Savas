@@ -118,15 +118,19 @@ async def fetch_news():
         msg = f"⚠️ News fetch error: {str(e)}"
     
     await broadcast(msg, store_if_offline=True)
-        
-
-async def scheduled_task(message: str):
-    await broadcast(f"⏰ Reminder: {message}")
-
+    
 
 async def call_self():
-    """Simulate self-calling every 13 minutes"""
-    await broadcast("🔁 Self-check triggered at " + str(datetime.now()))
+    web_socket_url = os.environ.get("WEB_SOCKET_URL")
+    try:
+        async with websockets.connect(web_socket_url) as websocket:
+            await websocket.send("ping")
+            await websocket.recv()
+    except Exception as e:
+        
+
+        async def scheduled_task(message: str):
+    await broadcast(f"⏰ Reminder: {message}")
 
 
 # ================== MESSAGE HANDLER ==================
