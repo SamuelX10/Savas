@@ -9,147 +9,14 @@ from datetime import datetime
 scheduler = None
 connected_clients = set()
 pending_messages = []
-routine_pairs = []     
-assistant_tools []
-
-# ================== GROQ VARIABLES ==================
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "groq/compound"  
-
-headers = {
-    "Authorization": f"Bearer {GROQ_API_KEY}",
-    "Content-Type": "application/json"
-}
-
-groq_respond = lambda msg: asyncio.to_thread(
-    lambda: httpx.post(
-        GROQ_API_URL,
-        headers=headers,
-        json={
-            "model": GROQ_MODEL,
-            "messages": [{"role": "assistant", "content": msg}]
-        },
-        temperature=1,
-    max_completion_tokens=1024,
-    top_p=1,
-    stream=True,
-    stop=None,
-    compound_custom={"tools":{"enabled_tools":["browser_automation","web_search","code_interpreter","visit_website"]}}
-        timeout=30
-    )
-)
-
-# ================== MAIN ==================
-async def main():
-    initialize_variables()
-    initialize_logic()
-    await start_server()
-
-
-# ================== INITIALIZATION ==================
-def initialize_variables():
-    global scheduler, 
-    routine_pairs, 
-    assistant_tools
-    
-    scheduler = AsyncIOScheduler()
-
-    assistant_tools = {
-    "news": fetch_news,
-    "music": fetch_music,
-    }
-    
-    # Example routine pairs (time, task)
-    routine_pairs = [
-    ("05:00", "news"),
-    ("13:00", "reminder", "Lunch Reminder"),
-    ("20:00", "reminder", "Night Reflection"),
-    ("15:00", "music")
-]
-
-
-def initialize_logic():
-    scheduler.start()
-    scheduler.add_job(call_self, "interval", minutes=13)
-  
-    for routine in routine_pairs:
-        hour, minute = map(int, routine[0].split(":"))
-        tool_key = routine[1]
-        tool_func = assistant_tools.get(tool_key)
-        if not tool_func:
-            continue  # or log error
-        if len(routine) > 2:
-            # pass extra argument(s) if needed
-            scheduler.add_job(tool_func, "cron", hour=hour, minute=minute, args=[routine[2]])
-        else:
-            scheduler.add_job(tool_func, "cron", hour=hour, minute=minute)
-
-
-async def start_server():
-    PORT = int(os.environ.get("PORT", 10000))
-    async with websockets.serve(handler, "0.0.0.0", PORT):
-        await asyncio.Future()
-
-
-# ================== HELPER METHODS ==================
-async def broadcast(message: str, store_if_offline=False):
-    """Send a message to all connected clients, or store if none are online."""
-    if connected_clients:
-        for ws in connected_clients.copy():
-            try:
-                await ws.send(message)
-            except:
-                connected_clients.discard(ws)
-    elif store_if_offline:
-        pending_messages.append(message)
-
-
-async def call_self():
-    web_socket_url = os.environ.get("WEB_SOCKET_URL")
-    try:
-        async with websockets.connect(web_socket_url) as websocket:
-            await websocket.send("ping")
-            await websocket.recv()
-    except Exception as e:
-        
-
-        async def scheduled_task(message: str):
-    await broadcast(f"⏰ Reminder: {message}")
-
-
-async def process_message(message: str) -> str:
-    try:
-        response = await groq_respond(message)
-        data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return f"Groq error: {str(e)}"
-
-
-# ================== WEBSOCKET HANDLER ==================
-async def handler(websocket):
-    connected_clients.add(websocket)
-
-    if pending_messages:
-        for msg in pending_messages:
-            await websocket.send(f"(📬 Missed) {msg}")
-        pending_messages.clear()
-
-    try:
-        async for message in websocket:
-            reply = await process_message(message)
-            await websocket.send(reply)
-    finally:
-        connected_clients.discard(websocket)
-
+routine_pairs = []
+assistant_tools = {}
 
 # ================== ASSISTANT TOOLS ==================
 async def fetch_music():
     await broadcast("🎵 Time for music!")
 
-    
-    async def fetch_news():
+async def fetch_news():
     news_api_key = os.environ.get("NEWS_API_KEY")
     if not news_api_key:
         msg = "NEWS_API_KEY not declared!"
@@ -179,6 +46,117 @@ async def fetch_music():
     
     await broadcast(msg, store_if_offline=True)
 
+# ================== GROQ VARIABLES ==================
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "groq/compound"
+
+headers = {
+    "Authorization": f"Bearer {GROQ_API_KEY}",
+    "Content-Type": "application/json"
+}
+
+groq_respond = lambda msg: asyncio.to_thread(
+    lambda: httpx.post(
+        GROQ_API_URL,
+        headers=headers,
+        json={
+            "model": GROQ_MODEL,
+            "messages": [{"role": "user", "content": msg}],
+            "compound_custom": {"tools": {"enabled_tools": ["browser_automation", "web_search", "code_interpreter", "visit_website"]}}
+        },
+        timeout=30
+    )
+)
+
+# ================== MAIN ==================
+async def main():
+    initialize_variables()
+    initialize_logic()
+    await start_server()
+
+# ================== INITIALIZATION ==================
+def initialize_variables():
+    global scheduler, routine_pairs, assistant_tools
+    scheduler = AsyncIOScheduler()
+
+    assistant_tools = {
+        "news": fetch_news,
+        "music": fetch_music,
+        "reminder": lambda msg: scheduled_task(msg)
+    }
+
+    routine_pairs = [
+        ("05:00", "news"),
+        ("13:00", "reminder", "Lunch Reminder"),
+        ("20:00", "reminder", "Night Reflection"),
+        ("15:00", "music")
+    ]
+
+def initialize_logic():
+    scheduler.start()
+    scheduler.add_job(call_self, "interval", minutes=13)
+    
+    for routine in routine_pairs:
+        hour, minute = map(int, routine[0].split(":"))
+        tool_key = routine[1]
+        tool_func = assistant_tools.get(tool_key)
+        if not tool_func:
+            continue
+        if len(routine) > 2:
+            scheduler.add_job(tool_func, "cron", hour=hour, minute=minute, args=[routine[2]])
+        else:
+            scheduler.add_job(tool_func, "cron", hour=hour, minute=minute)
+
+async def start_server():
+    PORT = int(os.environ.get("PORT", 10000))
+    async with websockets.serve(handler, "0.0.0.0", PORT):
+        await asyncio.Future()
+
+# ================== HELPER METHODS ==================
+async def broadcast(message: str, store_if_offline=False):
+    if connected_clients:
+        for ws in connected_clients.copy():
+            try:
+                await ws.send(message)
+            except:
+                connected_clients.discard(ws)
+    elif store_if_offline:
+        pending_messages.append(message)
+
+async def call_self():
+    web_socket_url = os.environ.get("WEB_SOCKET_URL", "ws://localhost:10000")
+    try:
+        async with websockets.connect(web_socket_url) as websocket:
+            await websocket.send("ping")
+            await websocket.recv()
+    except Exception as e:
+        print(f"call_self error: {e}")
+
+async def scheduled_task(message: str):
+    await broadcast(f"⏰ Reminder: {message}")
+
+async def process_message(message: str) -> str:
+    try:
+        response = await groq_respond(message)
+        data = response.json()
+        return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"Groq error: {str(e)}"
+
+# ================== WEBSOCKET HANDLER ==================
+async def handler(websocket):
+    connected_clients.add(websocket)
+    if pending_messages:
+        for msg in pending_messages:
+            await websocket.send(f"(📬 Missed) {msg}")
+        pending_messages.clear()
+    try:
+        async for message in websocket:
+            reply = await process_message(message)
+            await websocket.send(reply)
+    finally:
+        connected_clients.discard(websocket)
 
 if __name__ == "__main__":
     asyncio.run(main())
