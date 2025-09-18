@@ -13,7 +13,7 @@ routine_pairs = []     # store routines as [("08:00", "Morning News"), ...]
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-GROQ_MODEL = "llama3-8b-8192"  # You can change to other available models
+GROQ_MODEL = "groq/compound"  # You can change to other available models
 
 headers = {
     "Authorization": f"Bearer {GROQ_API_KEY}",
