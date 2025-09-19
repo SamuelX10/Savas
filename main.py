@@ -143,32 +143,31 @@ async def scheduled_task(message: str):
     await broadcast(f"⏰ Reminder: {message}")
 
 
+import json
+
 async def process_message(message: str) -> str:
+    # Try parse as JSON
     try:
-        data = json.loads(message)  # Try parse as JSON
-    except:
-        # If not JSON, treat as normal chat message
+        data = json.loads(message)
+        msg_type = data.get("type")
+
+        if msg_type == "login" and data.get("provider") == "google":
+            return "🔑 Google login requested, send me the token."
+
+        if msg_type == "token" and data.get("provider") == "google":
+            token = data.get("token")
+            return f"✅ Google token received: {token[:10]}..."  # preview first 10 chars
+
+        return "⚠️ Unknown JSON message type."
+
+    except json.JSONDecodeError:
+        # Not JSON → normal chat
         try:
             response = await groq_respond(message)
             data = response.json()
             return data["choices"][0]["message"]["content"].strip()
         except Exception as e:
             return f"Groq error: {str(e)}"
-
-    # If it's JSON, check the type
-    msg_type = data.get("type")
-
-    if msg_type == "login" and data.get("provider") == "google":
-        return "🔑 Google login requested, send me the token."
-
-    if msg_type == "token" and data.get("provider") == "google":
-        token = data.get("token")
-        # Store token or forward to Flask route for verification
-        # For now, just confirm receipt
-        return f"✅ Google token received: {token[:10]}..."  # only preview
-
-    return "⚠️ Unknown message type."
-
 
 
 # ================== WEBSOCKET HANDLER ==================
