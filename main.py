@@ -105,11 +105,11 @@ async def handle_google_auth_code(server_auth_code: str):
     GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
     GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
     GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "postmessage")
-
+    GOOGLE_TOKEN_URI = os.environ.get("GOOGLE_TOKEN_URI")
+    
     if not server_auth_code:
         return {"error": "Missing serverAuthCode"}
 
-    token_url = "https://oauth2.googleapis.com/token"
     payload = {
         "code": server_auth_code,
         "client_id": GOOGLE_CLIENT_ID,
@@ -120,7 +120,7 @@ async def handle_google_auth_code(server_auth_code: str):
 
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.post(token_url, data=payload)
+            res = await client.post(GOOGLE_TOKEN_URI, data=payload)
             res.raise_for_status()
             token_data = res.json()
         return token_data
