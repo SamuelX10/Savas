@@ -142,13 +142,35 @@ async def call_self():
 async def scheduled_task(message: str):
     await broadcast(f"⏰ Reminder: {message}")
 
+import json
+
 async def process_message(message: str) -> str:
     try:
-        response = await groq_respond(message)
-        data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return f"Groq error: {str(e)}"
+        data = json.loads(message)  # Try parse as JSON
+    except:
+        # If not JSON, treat as normal chat message
+        try:
+            response = await groq_respond(message)
+            data = response.json()
+            return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            return f"Groq error: {str(e)}"
+
+    # If it's JSON, check the type
+    msg_type = data.get("type")
+
+    if msg_type == "login" and data.get("provider") == "google":
+        return "🔑 Google login requested, send me the token."
+
+    if msg_type == "token" and data.get("provider") == "google":
+        token = data.get("token")
+        # Store token or forward to Flask route for verification
+        # For now, just confirm receipt
+        return f"✅ Google token received: {token[:10]}..."  # only preview
+
+    return "⚠️ Unknown message type."
+
+
 
 # ================== WEBSOCKET HANDLER ==================
 async def handler(websocket):
@@ -163,6 +185,47 @@ async def handler(websocket):
             await websocket.send(reply)
     finally:
         connected_clients.discard(websocket)
+
+
+
+load_dotenv()
+
+app = Flask(__name__)
+
+# Google OAuth settings
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "postmessage")
+
+TOKENS = {}  # Simple in-memory store {user_id: {access, refresh, expiry}}
+
+@app.route("/auth/google", methods=["POST"])
+def google_auth():
+    data = request.json
+    server_auth_code = data.get("code")
+
+    if not server_auth_code:
+        return jsonify({"error": "Missing serverAuthCode"}), 400
+
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "code": server_auth_code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+
+    try:
+        res = requests.post(token_url, data=payload)
+        res.raise_for_status()
+        token_data = res.json()
+
+        # For demo, just return the tokens
+        return jsonify(token_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 if __name__ == "__main__":
