@@ -150,7 +150,7 @@ async def start_server():
     app.add_routes([
         web.post("/", root_handler),      # POST / for chat
         web.post("/auth/", auth_handler), # POST /auth/ for auth providers
-        web.get("/health", lambda r: web.Response(text="Server running ✅"))
+        web.get("/server_status", lambda r: web.Response(text="Server is running"))
     ])
     runner = web.AppRunner(app)
     await runner.setup()
