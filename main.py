@@ -16,6 +16,53 @@ pending_messages = []
 routine_pairs = []
 assistant_tools = {}
 
+# ================== MAIN ==================
+async def main():
+async def main():
+initialize_variables()
+initialize_logic()
+await start_server()
+
+# ================== INITIALIZATION ==================
+def initialize_variables():
+    global scheduler, routine_pairs, assistant_tools
+    scheduler = AsyncIOScheduler()
+
+    assistant_tools = {
+        "news": fetch_news,
+        "music": fetch_music,
+        "reminder": scheduled_task
+    }
+
+    routine_pairs = [
+        ("05:00", "news"),
+        ("13:00", "reminder", "Lunch Reminder"),
+        ("20:00", "reminder", "Night Reflection"),
+        ("15:00", "music")
+    ]
+
+def initialize_logic():
+    scheduler.start()
+    # call_self equivalent
+    scheduler.add_job(lambda: asyncio.create_task(call_self()), "interval", minutes=13)
+
+    for routine in routine_pairs:
+        hour, minute = map(int, routine[0].split(":"))
+        tool_key = routine[1]
+        tool_func = assistant_tools.get(tool_key)
+        if not tool_func:
+            continue
+        if len(routine) > 2:
+            scheduler.add_job(lambda msg=routine[2]: asyncio.create_task(tool_func(msg)), "cron", hour=hour, minute=minute)
+        else:
+            scheduler.add_job(lambda f=tool_func: asyncio.create_task(f()), "cron", hour=hour, minute=minute)
+
+async def start_server():
+PORT = int(os.environ.get("PORT", 10000))
+async with websockets.serve(handler, "0.0.0.0", PORT):
+await asyncio.Future()
+
+
 # ================== ASSISTANT TOOLS ==================
 async def fetch_music():
     await broadcast("🎵 Time for music!")
@@ -68,40 +115,6 @@ async def groq_respond(msg: str):
             }
         )
         return response.json()
-
-# ================== INITIALIZATION ==================
-def initialize_variables():
-    global scheduler, routine_pairs, assistant_tools
-    scheduler = AsyncIOScheduler()
-
-    assistant_tools = {
-        "news": fetch_news,
-        "music": fetch_music,
-        "reminder": scheduled_task
-    }
-
-    routine_pairs = [
-        ("05:00", "news"),
-        ("13:00", "reminder", "Lunch Reminder"),
-        ("20:00", "reminder", "Night Reflection"),
-        ("15:00", "music")
-    ]
-
-def initialize_logic():
-    scheduler.start()
-    # call_self equivalent
-    scheduler.add_job(lambda: asyncio.create_task(call_self()), "interval", minutes=13)
-
-    for routine in routine_pairs:
-        hour, minute = map(int, routine[0].split(":"))
-        tool_key = routine[1]
-        tool_func = assistant_tools.get(tool_key)
-        if not tool_func:
-            continue
-        if len(routine) > 2:
-            scheduler.add_job(lambda msg=routine[2]: asyncio.create_task(tool_func(msg)), "cron", hour=hour, minute=minute)
-        else:
-            scheduler.add_job(lambda f=tool_func: asyncio.create_task(f()), "cron", hour=hour, minute=minute)
 
 # ================== HELPER METHODS ==================
 async def broadcast(message: str, store_if_offline=False):
@@ -162,25 +175,6 @@ async def websocket_handler(request):
 async def http_handler(request):
     return web.Response(text="Server is running ✅")
 
-# ================== MAIN ==================
-async def main():
-    initialize_variables()
-    initialize_logic()
-
-    app = web.Application()
-    app.router.add_get("/", http_handler)  # HEAD automatically handled
-    app.router.add_get("/ws", websocket_handler)
-
-    port = int(os.environ.get("PORT", 10000))
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    print(f"🚀 Server running on port {port}")
-    await site.start()
-
-    # Keep running
-    while True:
-        await asyncio.sleep(3600)
 
 # ================== RUN ==================
 if __name__ == "__main__":
