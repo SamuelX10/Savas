@@ -119,15 +119,16 @@ async def handle_google_auth_code(server_auth_code: str):
     }
 
     try:
-    async with httpx.AsyncClient() as client:
-        res = await client.post(GOOGLE_TOKEN_URI, data=payload)
-        if res.status_code != 200:
-            print("Google error response:", res.text)  # 👈 Add this
-        res.raise_for_status()
-        token_data = res.json()
-    return token_data
-except Exception as e:
-    return {"error": str(e)}
+        async with httpx.AsyncClient() as client:
+            res = await client.post(GOOGLE_TOKEN_URI, data=payload)
+            if res.status_code != 200:
+                print("Google error response:", res.text)  # 👈 debug log
+            res.raise_for_status()
+            token_data = res.json()
+        return token_data
+    except Exception as e:
+        return {"error": str(e)}
+
 
 async def auth_handler(request):
     try:
