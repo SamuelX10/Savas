@@ -18,9 +18,9 @@ assistant_tools = {}
 
 # ================== MAIN ==================
 async def main():
-initialize_variables()
-initialize_logic()
-await start_server()
+    initialize_variables()
+    initialize_logic()
+    await start_server()
 
 # ================== INITIALIZATION ==================
 def initialize_variables():
@@ -57,10 +57,9 @@ def initialize_logic():
             scheduler.add_job(lambda f=tool_func: asyncio.create_task(f()), "cron", hour=hour, minute=minute)
 
 async def start_server():
-PORT = int(os.environ.get("PORT", 10000))
-async with websockets.serve(handler, "0.0.0.0", PORT):
-await asyncio.Future()
-
+    PORT = int(os.environ.get("PORT", 10000))
+    async with websockets.serve(websocket_handler, "0.0.0.0", PORT):
+        await asyncio.Future()
 
 # ================== ASSISTANT TOOLS ==================
 async def fetch_music():
