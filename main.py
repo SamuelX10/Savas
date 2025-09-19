@@ -106,27 +106,38 @@ async def handle_google_auth_code(server_auth_code: str):
     GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
     GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "postmessage")
     GOOGLE_TOKEN_URI = os.environ.get("GOOGLE_TOKEN_URI")
-    
+
     if not server_auth_code:
         return {"error": "Missing serverAuthCode"}
 
     payload = {
         "code": server_auth_code,
         "client_id": GOOGLE_CLIENT_ID,
-        "client_secret": GOOGLE_CLIENT_SECRET,
+        # "client_secret": GOOGLE_CLIENT_SECRET,  # secret is sent but not logged
         "redirect_uri": GOOGLE_REDIRECT_URI,
         "grant_type": "authorization_code",
     }
 
+    print(f"[DEBUG] Sending payload to Google (without secret): {payload}")
+
     try:
         async with httpx.AsyncClient() as client:
-            res = await client.post(GOOGLE_TOKEN_URI, data=payload)
-            if res.status_code != 200:
-                print("Google error response:", res.text)  # 👈 debug log
+            # include secret in actual request
+            request_payload = payload.copy()
+            request_payload["client_secret"] = GOOGLE_CLIENT_SECRET
+
+            res = await client.post(GOOGLE_TOKEN_URI, data=request_payload)
+
+            # read & decode body properly
+            body_bytes = await res.aread()
+            body_text = body_bytes.decode("utf-8", errors="replace")
+            print(f"[DEBUG] Google response [{res.status_code}]: {body_text}")
+
             res.raise_for_status()
-            token_data = res.json()
+            token_data = json.loads(body_text)
         return token_data
     except Exception as e:
+        print(f"[ERROR] Exception while calling Google: {str(e)}")
         return {"error": str(e)}
 
 
