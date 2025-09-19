@@ -18,7 +18,6 @@ assistant_tools = {}
 
 # ================== MAIN ==================
 async def main():
-async def main():
 initialize_variables()
 initialize_logic()
 await start_server()
