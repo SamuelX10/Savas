@@ -1,6 +1,7 @@
-websockets==12.0
+flask
+python-dotenv
+aiohttp
+websockets
 httpx
 apscheduler
-requests>=2.31.0
-flask
-dotenv
+requests
