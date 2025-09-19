@@ -168,8 +168,8 @@ async def main():
     initialize_logic()
 
     app = web.Application()
-app.router.add_get("/", http_handler)
-app.router.add_get("/ws", websocket_handler)
+    app.router.add_get("/", http_handler)  # HEAD automatically handled
+    app.router.add_get("/ws", websocket_handler)
 
     port = int(os.environ.get("PORT", 10000))
     runner = web.AppRunner(app)
