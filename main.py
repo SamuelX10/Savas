@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 from flask import Flask, request, jsonify
 from dotenv import load_dotenv
@@ -141,7 +142,6 @@ async def call_self():
 async def scheduled_task(message: str):
     await broadcast(f"⏰ Reminder: {message}")
 
-import json
 
 async def process_message(message: str) -> str:
     try:
