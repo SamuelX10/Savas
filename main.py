@@ -16,51 +16,6 @@ pending_messages = []
 routine_pairs = []
 assistant_tools = {}
 
-# ================== MAIN ==================
-async def main():
-    initialize_variables()
-    initialize_logic()
-    await start_server()
-
-# ================== INITIALIZATION ==================
-def initialize_variables():
-    global scheduler, routine_pairs, assistant_tools
-    scheduler = AsyncIOScheduler()
-
-    assistant_tools = {
-        "news": fetch_news,
-        "music": fetch_music,
-        "reminder": scheduled_task
-    }
-
-    routine_pairs = [
-        ("05:00", "news"),
-        ("13:00", "reminder", "Lunch Reminder"),
-        ("20:00", "reminder", "Night Reflection"),
-        ("15:00", "music")
-    ]
-
-def initialize_logic():
-    scheduler.start()
-    # call_self equivalent
-    scheduler.add_job(lambda: asyncio.create_task(call_self()), "interval", minutes=13)
-
-    for routine in routine_pairs:
-        hour, minute = map(int, routine[0].split(":"))
-        tool_key = routine[1]
-        tool_func = assistant_tools.get(tool_key)
-        if not tool_func:
-            continue
-        if len(routine) > 2:
-            scheduler.add_job(lambda msg=routine[2]: asyncio.create_task(tool_func(msg)), "cron", hour=hour, minute=minute)
-        else:
-            scheduler.add_job(lambda f=tool_func: asyncio.create_task(f()), "cron", hour=hour, minute=minute)
-
-async def start_server():
-    PORT = int(os.environ.get("PORT", 10000))
-    async with websockets.serve(websocket_handler, "0.0.0.0", PORT):
-        await asyncio.Future()
-
 # ================== ASSISTANT TOOLS ==================
 async def fetch_music():
     await broadcast("🎵 Time for music!")
@@ -126,14 +81,13 @@ async def broadcast(message: str, store_if_offline=False):
         pending_messages.append(message)
 
 async def call_self():
-    web_socket_url = os.environ.get("WEB_SOCKET_URL", "ws://localhost:10000")
+    web_socket_url = os.environ.get("WEB_SOCKET_URL", "http://localhost:10000")
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             await client.post(web_socket_url, data="ping")
     except Exception as e:
         print(f"call_self error: {e}")
 
-# ================== MESSAGE PROCESSING ==================
 async def process_message(message: str) -> str:
     try:
         data = json.loads(message)
@@ -170,10 +124,91 @@ async def websocket_handler(request):
     return ws
 
 # ================== HTTP HANDLER ==================
-async def http_handler(request):
-    return web.Response(text="Server is running ✅")
+async def google_auth_handler(request):
+    data = await request.json()
+    server_auth_code = data.get("code")
+    GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+    GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "postmessage")
 
+    if not server_auth_code:
+        return web.json_response({"error": "Missing serverAuthCode"}, status=400)
 
-# ================== RUN ==================
+    token_url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "code": server_auth_code,
+        "client_id": GOOGLE_CLIENT_ID,
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uri": GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code",
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            res = await client.post(token_url, data=payload)
+            res.raise_for_status()
+            token_data = res.json()
+        return web.json_response(token_data)
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+# ================== SCHEDULER ==================
+def initialize_variables():
+    global scheduler, routine_pairs, assistant_tools
+    scheduler = AsyncIOScheduler()
+
+    assistant_tools = {
+        "news": fetch_news,
+        "music": fetch_music,
+        "reminder": scheduled_task
+    }
+
+    routine_pairs = [
+        ("05:00", "news"),
+        ("13:00", "reminder", "Lunch Reminder"),
+        ("20:00", "reminder", "Night Reflection"),
+        ("15:00", "music")
+    ]
+
+def initialize_logic():
+    scheduler.start()
+    scheduler.add_job(lambda: asyncio.create_task(call_self()), "interval", minutes=13)
+
+    for routine in routine_pairs:
+        hour, minute = map(int, routine[0].split(":"))
+        tool_key = routine[1]
+        tool_func = assistant_tools.get(tool_key)
+        if not tool_func:
+            continue
+        if len(routine) > 2:
+            scheduler.add_job(lambda msg=routine[2]: asyncio.create_task(tool_func(msg)), "cron", hour=hour, minute=minute)
+        else:
+            scheduler.add_job(lambda f=tool_func: asyncio.create_task(f()), "cron", hour=hour, minute=minute)
+
+# ================== START SERVER ==================
+async def start_server():
+    app = web.Application()
+    app.add_routes([
+        web.get("/chat", websocket_handler),
+        web.post("/auth/google", google_auth_handler),
+        web.get("/", lambda r: web.Response(text="Server running ✅"))
+    ])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    print(f"Server started on port {port}")
+    await site.start()
+
+    # Keep server alive
+    while True:
+        await asyncio.sleep(3600)
+
+# ================== MAIN ==================
+async def main():
+    initialize_variables()
+    initialize_logic()
+    await start_server()
+
 if __name__ == "__main__":
     asyncio.run(main())
