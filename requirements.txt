@@ -1,4 +1,4 @@
-aiohttp==3.9.8
-httpx==0.26.1
-apscheduler==3.10.1
-python-dotenv==1.1.1
+aiohttp
+httpx
+apscheduler
+python-dotenv
