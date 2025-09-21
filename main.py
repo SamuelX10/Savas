@@ -239,6 +239,8 @@ async def main():
     scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=4)
 
     await start_server()
-
+  while True:
+    await asyncio.sleep(3600)
+    
 if __name__ == "__main__":
     asyncio.run(main())
