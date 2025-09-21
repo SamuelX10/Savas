@@ -144,7 +144,7 @@ func processMessage(message string) string {
 func main() {
 	// Start heartbeat every 4 minutes
 	c := cron.New()
-	c.AddFunc("@every 4m", keepServerAlive)
+	c.AddFunc("@every 10m", keepServerAlive)
 	c.Start()
 	defer c.Stop()
 
