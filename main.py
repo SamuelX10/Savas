@@ -1,0 +1,244 @@
+import os
+import json
+import asyncio
+import logging
+from aiohttp import web, WSMsgType
+import httpx
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from dotenv import load_dotenv
+
+load_dotenv()
+scheduler = None
+ASSISTANT_TOOLS = {}
+
+# ===== In-memory device state storage =====
+CONNECTED_DEVICES = {}
+DEVICE_STATES = {}
+
+# ===== TOOL REGISTRATION =====
+def register_tool(name):
+    """Decorator to register tools dynamically."""
+    def wrapper(func):
+        ASSISTANT_TOOLS[name] = func
+        return func
+    return wrapper
+
+# ===== SERVER HEARTBEAT =====
+async def keep_server_alive():
+    url = "https://savas-zgh8.onrender.com/"
+    payload = {"data": "Server is running"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(url, json=payload)
+    except Exception as e:
+        pass
+
+# ===== SERVER STARTUP =====
+async def root_handler(request: web.Request) -> web.Response:
+    data = await request.json()  # contains {"data": "Server is running"}
+    return web.json_response({"status": "ok"})
+
+async def device_handler(request: web.Request) -> web.WebSocketResponse:
+    """WebSocket endpoint for devices to send updates."""
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
+    device_id = request.query.get("device_id")
+    device_type = request.query.get("device_type")
+
+    if not device_id or not device_type:
+        await ws.close()
+        return ws
+
+    CONNECTED_DEVICES[device_id] = ws
+    logging.info(f"[WS] Device connected: {device_id} ({device_type})")
+
+    try:
+        async for msg in ws:
+            if msg.type == WSMsgType.TEXT:
+                try:
+                    data = json.loads(msg.data)
+                except json.JSONDecodeError:
+                    continue
+
+                # Merge device id/type and timestamp
+                data["device_id"] = device_id
+                data["device_type"] = device_type
+                data["last_seen"] = asyncio.get_event_loop().time()
+
+                # Update in-memory state
+                DEVICE_STATES[device_id] = data
+                logging.info(f"[Device Update] {device_id}: {data}")
+
+                # Example: push commands back to device
+                if "new_wallpaper" in data:
+                    await ws.send_json({
+                        "type": "wallpaper_update",
+                        "url": data["new_wallpaper"]
+                    })
+
+            elif msg.type == WSMsgType.ERROR:
+                logging.warning(f"[WS] Error: {ws.exception()}")
+
+    finally:
+        CONNECTED_DEVICES.pop(device_id, None)
+        logging.info(f"[WS] Device disconnected: {device_id}")
+
+    return ws
+
+async def chat_handler(request: web.Request) -> web.Response:
+    try:
+        data = await request.json()
+        message = data.get("data", "")
+        if not message:
+            return web.json_response({"error": "Data is required"}, status=400)
+
+        reply = await process_message(message)
+        return web.json_response({"data": reply})
+
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+async def start_server():
+    app = web.Application()
+    app.add_routes([
+        web.post("/chat", chat_handler),
+        web.get("/device", device_handler),
+        web.get("/", root_handler),
+    ])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+# ===== PROCESS MESSAGE =====
+async def process_message(message: str) -> str:
+    try:
+        access_token = await get_google_access_token()
+        profile = await get_google_user_info(access_token)
+        given_name = profile.get("given_name", "Samuel")
+
+        # Step 1: Ask Groq for intent
+        intent_prompt = {
+            "role": "system",
+            "content": """You are an intent router.
+
+Available tools: get_google_tasks, get_google_calendar.
+If user asks about tasks → {"action": "get_google_tasks"}.
+If user asks about schedule/calendar → {"action": "get_google_calendar"}.
+Otherwise → {"action":"chat"}.
+Return ONLY JSON, no text."""
+        }
+        intent_raw = await groq_respond_with_context(intent_prompt, message)
+        try:
+            intent = json.loads(intent_raw)
+        except:
+            intent = {"action": "chat"}
+
+        # Step 2: Tool execution if needed
+        if intent["action"] in ASSISTANT_TOOLS:
+            tool_func = ASSISTANT_TOOLS[intent["action"]]
+            tool_result = await tool_func(access_token)
+
+            # Step 3: Final response
+            final_prompt = {
+                "role": "system",
+                "content": f"You are {given_name}'s Jarvis-like AI.\n"
+                           f"User asked: '{message}'\n"
+                           f"Tool output:\n{json.dumps(tool_result, indent=2)}\n"
+                           f"Now respond naturally, call him 'Sir'."
+            }
+            return await groq_respond_with_context(final_prompt, message)
+
+        # Step 4: Normal chat fallback
+        chat_prompt = {
+            "role": "system",
+            "content": f"You are {given_name}'s personal AI assistant (Jarvis style). "
+                       f"Always helpful and call him 'Sir'."
+        }
+        return await groq_respond_with_context(chat_prompt, message)
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# ===== GROQ CHAT =====
+async def groq_respond_with_context(system_prompt, user_message):
+    GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+    GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+    GROQ_MODEL = "groq/compound"
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "model": GROQ_MODEL,
+        "messages": [system_prompt, {"role": "user", "content": user_message}],
+        "temperature": 1,
+        "max_tokens": 1024,
+        "top_p": 1
+    }
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(GROQ_API_URL, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"]
+
+# ===== ASSISTANT TOOLS =====
+@register_tool("get_google_tasks")
+async def get_google_tasks(access_token: str):
+    url = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+@register_tool("get_google_calendar")
+async def get_google_calendar(access_token: str):
+    url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+@register_tool("get_google_user_info")
+async def get_google_user_info(access_token: str):
+    url = "https://www.googleapis.com/oauth2/v2/userinfo"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        return resp.json()
+
+# ===== UTILITY METHODS =====
+async def get_google_access_token():
+    url = "https://oauth2.googleapis.com/token"
+    payload = {
+        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
+        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+        "refresh_token": os.getenv("GOOGLE_REFRESH_TOKEN"),
+        "grant_type": "refresh_token"
+    }
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(url, data=payload)
+        resp.raise_for_status()
+        return resp.json()["access_token"]
+
+# ===== MAIN ENTRY POINT =====
+async def main():
+    global scheduler
+    scheduler = AsyncIOScheduler()
+    scheduler.start()
+
+    # 4-minute heartbeat ping
+    scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=4)
+
+    await start_server()
+
+if __name__ == "__main__":
+    asyncio.run(main())
