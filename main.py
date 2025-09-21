@@ -30,13 +30,12 @@ async def keep_server_alive():
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(url, json=payload)
-    except Exception as e:
+    except Exception:
         pass
 
 # ===== SERVER STARTUP =====
 async def root_handler(request):
     return web.json_response({"status": "ok"})
-
 
 async def device_handler(request: web.Request) -> web.WebSocketResponse:
     """WebSocket endpoint for devices to send updates."""
@@ -238,9 +237,12 @@ async def main():
     # 4-minute heartbeat ping
     scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=4)
 
+    # Start the server
     await start_server()
-  while True:
-    await asyncio.sleep(3600)
-    
+
+    # Keep the app alive
+    while True:
+        await asyncio.sleep(3600)
+
 if __name__ == "__main__":
     asyncio.run(main())
