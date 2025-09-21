@@ -34,9 +34,9 @@ async def keep_server_alive():
         pass
 
 # ===== SERVER STARTUP =====
-async def root_handler(request: web.Request) -> web.Response:
-    data = await request.json()  # contains {"data": "Server is running"}
+async def root_handler(request):
     return web.json_response({"status": "ok"})
+
 
 async def device_handler(request: web.Request) -> web.WebSocketResponse:
     """WebSocket endpoint for devices to send updates."""
