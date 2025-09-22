@@ -25,11 +25,11 @@ def register_tool(name):
 
 # ===== SERVER HEARTBEAT =====
 async def keep_server_alive():
-    url = "https://savas-zgh8.onrender.com/"
+    RENDER_SERVER_URL = os.environ["RENDER_SERVER_URL"]
     payload = {"data": "Server is running"}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(url, json=payload)
+            await client.post(RENDER_SERVER_URL, json=payload)
     except Exception:
         pass
 
