@@ -98,13 +98,23 @@ async def chat_handler(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+async def user_handler(request: web.Request) -> web.Response:
+    try:
+        access_token = await ServerUtil.get_google_access_token()
+        user_info = await ServerUtil.get_google_user_info(access_token)
+        return web.json_response({"data": user_info})
+    except Exception as e:
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def start_server():
-    app = web.Application()
     app.add_routes([
-        web.post("/chat", chat_handler),
-        web.get("/device", device_handler),
-        web.get("/", root_handler),
-    ])
+    web.post("/chat", chat_handler),
+    web.get("/device", device_handler),
+    web.get("/user", user_handler),
+    web.get("/", root_handler),
+])
+        
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
