@@ -8,7 +8,7 @@ class GroqUtil:
     GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
     @staticmethod
-    async def chat(system_prompt: Dict[str, Any], user_message: str) -> str:
+    async def prompt(system_prompt: Dict[str, Any], user_message: str) -> str:
         headers = {
             "Authorization": f"Bearer {GroqUtil.GROQ_API_KEY}",
             "Content-Type": "application/json"
