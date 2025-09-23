@@ -169,13 +169,14 @@ async def start_server():
 
 async def main():
     global scheduler
-    scheduler = AsyncIOScheduler()
+    scheduler = AsyncIOScheduler(event_loop=asyncio.get_running_loop())
     scheduler.start()
 
     await start_server()
     scheduler.add_job(keep_server_alive, 'interval', minutes=1)
+
     while True:
         await asyncio.sleep(3600)
-
+        
 if __name__ == "__main__":
     asyncio.run(main())
