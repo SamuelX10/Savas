@@ -1,5 +1,6 @@
 import os
 import httpx
+from typing import Dict, Any
 
 class ServerUtil:
     @staticmethod
@@ -15,3 +16,12 @@ class ServerUtil:
             resp = await client.post(url, data=payload)
             resp.raise_for_status()
             return resp.json()["access_token"]
+
+    @staticmethod
+    async def get_google_user_info(access_token: str) -> Dict[str, Any]:
+        url = "https://www.googleapis.com/oauth2/v2/userinfo"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers)
+            resp.raise_for_status()
+            return resp.json()
