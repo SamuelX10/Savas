@@ -124,8 +124,8 @@ async def start_server():
 # ===== PROCESS MESSAGE =====
 async def process_message(message: str) -> str:
     try:
-        access_token = await get_google_access_token()
-        profile = await get_google_user_info(access_token)
+        access_token = await ServerUtil.get_google_access_token()
+        profile = await ServerUtil.get_google_user_info(access_token)
         given_name = profile.get("given_name", "Samuel")
 
         # Step 1: Ask Groq for intent
@@ -196,21 +196,22 @@ async def groq_respond_with_context(system_prompt, user_message):
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 
-# ===== MAIN ENTRY POINT =====
+
 async def main():
     global scheduler
     scheduler = AsyncIOScheduler()
     scheduler.start()
 
-    # 4-minute heartbeat ping
-    scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=4)
-
     # Start the server
     await start_server()
+    
+    # 4-minute heartbeat ping
+    scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=1)
 
     # Keep the app alive
     while True:
         await asyncio.sleep(3600)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
