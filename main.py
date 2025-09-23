@@ -105,20 +105,6 @@ async def user_handler(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-# ===== START SERVER =====
-async def start_server():
-    app = web.Application()
-    app.add_routes([
-        web.post("/chat", chat_handler),
-        web.get("/device", device_handler),
-        web.get("/user", user_handler),
-        web.get("/", root_handler),
-    ])
-    runner = web.AppRunner(app)
-    await runner.setup()
-    port = int(os.environ.get("PORT", 10000))
-    site = web.TCPSite(runner, "0.0.0.0", port)
-    await site.start()
 
 # ===== PROCESS MESSAGE =====
 async def process_message(message: str) -> str:
@@ -137,7 +123,7 @@ If user asks about schedule/calendar → {"action": "get_google_calendar"}.
 Otherwise → {"action":"chat"}.
 Return ONLY JSON, no text."""
         }
-        intent_raw = await GroqUtil.chat(intent_prompt, message)
+        intent_raw = await GroqUtil.prompt(intent_prompt, message)
         try:
             intent = json.loads(intent_raw)
         except:
@@ -154,17 +140,34 @@ Return ONLY JSON, no text."""
                            f"Tool output:\n{json.dumps(tool_result, indent=2)}\n"
                            f"Now respond naturally, call him 'Sir'."
             }
-            return await GroqUtil.chat(final_prompt, message)
+            return await GroqUtil.prompt(final_prompt, message)
 
         # Normal chat fallback
         chat_prompt = {
             "role": "system",
             "content": f"You are {given_name}'s personal AI assistant (Jarvis style). Always helpful and call him 'Sir'."
         }
-        return await GroqUtil.chat(chat_prompt, message)
+        return await GroqUtil.prompt(chat_prompt, message)
 
     except Exception as e:
         return f"Error: {str(e)}"
+
+
+# ===== START SERVER =====
+async def start_server():
+    app = web.Application()
+    app.add_routes([
+        web.post("/chat", chat_handler),
+        web.get("/device", device_handler),
+        web.get("/user", user_handler),
+        web.get("/", root_handler),
+    ])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 10000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
 
 # ===== MAIN ENTRY POINT =====
 async def main():
@@ -172,10 +175,7 @@ async def main():
     scheduler = AsyncIOScheduler()
     scheduler.start()
 
-    # Start server
     await start_server()
-
-    # Heartbeat ping every 1 minute
     scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=1)
 
     while True:
