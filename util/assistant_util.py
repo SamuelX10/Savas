@@ -2,7 +2,7 @@ import os
 import httpx
 from typing import Dict, Any
 
-class server_util:
+class assistant_util:
     def __init__(self):
         self.base_tasks_url = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
         self.base_calendar_url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
