@@ -186,48 +186,6 @@ async def groq_respond_with_context(system_prompt, user_message):
         data = resp.json()
         return data["choices"][0]["message"]["content"]
 
-# ===== ASSISTANT TOOLS =====
-@register_tool("get_google_tasks")
-async def get_google_tasks(access_token: str):
-    url = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
-
-@register_tool("get_google_calendar")
-async def get_google_calendar(access_token: str):
-    url = "https://www.googleapis.com/calendar/v3/calendars/primary/events"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
-
-@register_tool("get_google_user_info")
-async def get_google_user_info(access_token: str):
-    url = "https://www.googleapis.com/oauth2/v2/userinfo"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(url, headers=headers)
-        resp.raise_for_status()
-        return resp.json()
-
-# ===== UTILITY METHODS =====
-async def get_google_access_token():
-    url = "https://oauth2.googleapis.com/token"
-    payload = {
-        "client_id": os.getenv("GOOGLE_CLIENT_ID"),
-        "client_secret": os.getenv("GOOGLE_CLIENT_SECRET"),
-        "refresh_token": os.getenv("GOOGLE_REFRESH_TOKEN"),
-        "grant_type": "refresh_token"
-    }
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(url, data=payload)
-        resp.raise_for_status()
-        return resp.json()["access_token"]
-
 # ===== MAIN ENTRY POINT =====
 async def main():
     global scheduler
