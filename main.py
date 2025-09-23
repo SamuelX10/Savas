@@ -138,13 +138,13 @@ async def user_handler(request: web.Request) -> web.Response:
     try:
         access_token = await ServerUtil.get_google_access_token()
         user_info = await ServerUtil.get_google_user_info(access_token)
-        return web.json_response({"data": user_info})
+        return web.json_response(user_info)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
 async def root_handler(request):
     return web.json_response({"status": "ok"})
-
+    
 
 # ===== MAIN ENTRY POINT =====
 async def keep_server_alive():
