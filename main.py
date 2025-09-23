@@ -51,11 +51,7 @@ Return ONLY JSON, no text."""
         except:
             intent = {"action": "chat"}
 
-        if intent["action"] in ASSISTANT_TOOLS:
-            tool_func = ASSISTANT_TOOLS[intent["action"]]
-            tool_result = await tool_func(access_token)
-
-            final_prompt = {
+        if intent[ = {
                 "role": "system",
                 "content": f"You are {given_name}'s Jarvis-like AI.\n"
                            f"User asked: '{message}'\n"
@@ -177,8 +173,7 @@ async def main():
     scheduler.start()
 
     await start_server()
-    scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=1)
-
+    scheduler.add_job(keep_server_alive, 'interval', minutes=1)
     while True:
         await asyncio.sleep(3600)
 
