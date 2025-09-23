@@ -7,6 +7,10 @@ import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
 
+import ServerUtil
+import GroqUtil
+import AssistantUtil
+
 load_dotenv()
 scheduler = None
 ASSISTANT_TOOLS = {}
