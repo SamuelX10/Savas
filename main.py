@@ -27,20 +27,52 @@ def register_tool(name):
         return func
     return wrapper
 
-# ===== SERVER HEARTBEAT =====
-async def keep_server_alive():
-    RENDER_SERVER_URL = os.environ.get("RENDER_SERVER_URL", "")
-    payload = {"data": "Server is running"}
+
+# ===== PROCESS MESSAGE =====
+async def process_message(message: str) -> str:
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            await client.post(RENDER_SERVER_URL, json=payload)
-    except Exception:
-        pass
+        access_token = await ServerUtil.get_google_access_token()
+        profile = await ServerUtil.get_google_user_info(access_token)
+        given_name = profile.get("given_name", "Samuel")
 
-# ===== SERVER STARTUP =====
-async def root_handler(request):
-    return web.json_response({"status": "ok"})
+        # Ask Groq for intent
+        intent_prompt = {
+            "role": "system",
+            "content": """You are an intent router.
+Available tools: get_google_tasks, get_google_calendar.
+If user asks about tasks → {"action": "get_google_tasks"}.
+If user asks about schedule/calendar → {"action": "get_google_calendar"}.
+Otherwise → {"action":"chat"}.
+Return ONLY JSON, no text."""
+        }
+        intent_raw = await GroqUtil.prompt(intent_prompt, message)
+        try:
+            intent = json.loads(intent_raw)
+        except:
+            intent = {"action": "chat"}
 
+        if intent[ = {
+                "role": "system",
+                "content": f"You are {given_name}'s Jarvis-like AI.\n"
+                           f"User asked: '{message}'\n"
+                           f"Tool output:\n{json.dumps(tool_result, indent=2)}\n"
+                           f"Now respond naturally, call him 'Sir'."
+            }
+            return await GroqUtil.prompt(final_prompt, message)
+
+        # Normal chat fallback
+        chat_prompt = {
+            "role": "system",
+            "content": f"You are {given_name}'s personal AI assistant (Jarvis style). Always helpful and call him 'Sir'."
+        }
+        return await GroqUtil.prompt(chat_prompt, message)
+
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+
+
+# ===== HANDLERS =====
 async def device_handler(request: web.Request) -> web.WebSocketResponse:
     """WebSocket endpoint for devices to send updates."""
     ws = web.WebSocketResponse()
@@ -86,7 +118,6 @@ async def device_handler(request: web.Request) -> web.WebSocketResponse:
 
     return ws
 
-# ===== CHAT HANDLER =====
 async def chat_handler(request: web.Request) -> web.Response:
     try:
         data = await request.json()
@@ -100,7 +131,6 @@ async def chat_handler(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-# ===== USER HANDLER =====
 async def user_handler(request: web.Request) -> web.Response:
     try:
         access_token = await ServerUtil.get_google_access_token()
@@ -109,55 +139,20 @@ async def user_handler(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+async def root_handler(request):
+    return web.json_response({"status": "ok"})
 
-# ===== PROCESS MESSAGE =====
-async def process_message(message: str) -> str:
+
+# ===== MAIN ENTRY POINT =====
+async def keep_server_alive():
+    RENDER_SERVER_URL = os.environ.get("RENDER_SERVER_URL", "")
+    payload = {"data": "Server is running"}
     try:
-        access_token = await ServerUtil.get_google_access_token()
-        profile = await ServerUtil.get_google_user_info(access_token)
-        given_name = profile.get("given_name", "Samuel")
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(RENDER_SERVER_URL, json=payload)
+    except Exception:
+        pass
 
-        # Ask Groq for intent
-        intent_prompt = {
-            "role": "system",
-            "content": """You are an intent router.
-Available tools: get_google_tasks, get_google_calendar.
-If user asks about tasks → {"action": "get_google_tasks"}.
-If user asks about schedule/calendar → {"action": "get_google_calendar"}.
-Otherwise → {"action":"chat"}.
-Return ONLY JSON, no text."""
-        }
-        intent_raw = await GroqUtil.prompt(intent_prompt, message)
-        try:
-            intent = json.loads(intent_raw)
-        except:
-            intent = {"action": "chat"}
-
-        if intent["action"] in ASSISTANT_TOOLS:
-            tool_func = ASSISTANT_TOOLS[intent["action"]]
-            tool_result = await tool_func(access_token)
-
-            final_prompt = {
-                "role": "system",
-                "content": f"You are {given_name}'s Jarvis-like AI.\n"
-                           f"User asked: '{message}'\n"
-                           f"Tool output:\n{json.dumps(tool_result, indent=2)}\n"
-                           f"Now respond naturally, call him 'Sir'."
-            }
-            return await GroqUtil.prompt(final_prompt, message)
-
-        # Normal chat fallback
-        chat_prompt = {
-            "role": "system",
-            "content": f"You are {given_name}'s personal AI assistant (Jarvis style). Always helpful and call him 'Sir'."
-        }
-        return await GroqUtil.prompt(chat_prompt, message)
-
-    except Exception as e:
-        return f"Error: {str(e)}"
-
-
-# ===== START SERVER =====
 async def start_server():
     app = web.Application()
     app.add_routes([
@@ -172,8 +167,6 @@ async def start_server():
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
 
-
-# ===== MAIN ENTRY POINT =====
 async def main():
     global scheduler
     scheduler = AsyncIOScheduler()
