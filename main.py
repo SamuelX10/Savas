@@ -25,7 +25,7 @@ def register_tool(name):
 
 # ===== SERVER HEARTBEAT =====
 async def keep_server_alive():
-    RENDER_SERVER_URL = os.environ["RENDER_SERVER_URL"]
+    RENDER_SERVER_URL = os.environ.get("RENDER_SERVER_URL", "")
     payload = {"data": "Server is running"}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -60,22 +60,19 @@ async def device_handler(request: web.Request) -> web.WebSocketResponse:
                 except json.JSONDecodeError:
                     continue
 
-                # Merge device id/type and timestamp
                 data["device_id"] = device_id
                 data["device_type"] = device_type
                 data["last_seen"] = asyncio.get_event_loop().time()
 
-                # Update in-memory state
                 DEVICE_STATES[device_id] = data
                 logging.info(f"[Device Update] {device_id}: {data}")
 
-                # Example: push commands back to device
+                # Push commands back to device if needed
                 if "new_wallpaper" in data:
                     await ws.send_json({
                         "type": "wallpaper_update",
                         "url": data["new_wallpaper"]
                     })
-
             elif msg.type == WSMsgType.ERROR:
                 logging.warning(f"[WS] Error: {ws.exception()}")
 
@@ -85,6 +82,7 @@ async def device_handler(request: web.Request) -> web.WebSocketResponse:
 
     return ws
 
+# ===== CHAT HANDLER =====
 async def chat_handler(request: web.Request) -> web.Response:
     try:
         data = await request.json()
@@ -98,6 +96,7 @@ async def chat_handler(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
+# ===== USER HANDLER =====
 async def user_handler(request: web.Request) -> web.Response:
     try:
         access_token = await ServerUtil.get_google_access_token()
@@ -106,15 +105,15 @@ async def user_handler(request: web.Request) -> web.Response:
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
-
+# ===== START SERVER =====
 async def start_server():
+    app = web.Application()
     app.add_routes([
-    web.post("/chat", chat_handler),
-    web.get("/device", device_handler),
-    web.get("/user", user_handler),
-    web.get("/", root_handler),
-])
-        
+        web.post("/chat", chat_handler),
+        web.get("/device", device_handler),
+        web.get("/user", user_handler),
+        web.get("/", root_handler),
+    ])
     runner = web.AppRunner(app)
     await runner.setup()
     port = int(os.environ.get("PORT", 10000))
@@ -128,29 +127,26 @@ async def process_message(message: str) -> str:
         profile = await ServerUtil.get_google_user_info(access_token)
         given_name = profile.get("given_name", "Samuel")
 
-        # Step 1: Ask Groq for intent
+        # Ask Groq for intent
         intent_prompt = {
             "role": "system",
             "content": """You are an intent router.
-
 Available tools: get_google_tasks, get_google_calendar.
 If user asks about tasks → {"action": "get_google_tasks"}.
 If user asks about schedule/calendar → {"action": "get_google_calendar"}.
 Otherwise → {"action":"chat"}.
 Return ONLY JSON, no text."""
         }
-        intent_raw = await groq_respond_with_context(intent_prompt, message)
+        intent_raw = await GroqUtil.chat(intent_prompt, message)
         try:
             intent = json.loads(intent_raw)
         except:
             intent = {"action": "chat"}
 
-        # Step 2: Tool execution if needed
         if intent["action"] in ASSISTANT_TOOLS:
             tool_func = ASSISTANT_TOOLS[intent["action"]]
             tool_result = await tool_func(access_token)
 
-            # Step 3: Final response
             final_prompt = {
                 "role": "system",
                 "content": f"You are {given_name}'s Jarvis-like AI.\n"
@@ -158,60 +154,32 @@ Return ONLY JSON, no text."""
                            f"Tool output:\n{json.dumps(tool_result, indent=2)}\n"
                            f"Now respond naturally, call him 'Sir'."
             }
-            return await groq_respond_with_context(final_prompt, message)
+            return await GroqUtil.chat(final_prompt, message)
 
-        # Step 4: Normal chat fallback
+        # Normal chat fallback
         chat_prompt = {
             "role": "system",
-            "content": f"You are {given_name}'s personal AI assistant (Jarvis style). "
-                       f"Always helpful and call him 'Sir'."
+            "content": f"You are {given_name}'s personal AI assistant (Jarvis style). Always helpful and call him 'Sir'."
         }
-        return await groq_respond_with_context(chat_prompt, message)
+        return await GroqUtil.chat(chat_prompt, message)
 
     except Exception as e:
         return f"Error: {str(e)}"
 
-# ===== GROQ CHAT =====
-async def groq_respond_with_context(system_prompt, user_message):
-    GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-    GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-    GROQ_MODEL = "groq/compound"
-
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": [system_prompt, {"role": "user", "content": user_message}],
-        "temperature": 1,
-        "max_tokens": 1024,
-        "top_p": 1
-    }
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(GROQ_API_URL, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"]
-
-
+# ===== MAIN ENTRY POINT =====
 async def main():
     global scheduler
     scheduler = AsyncIOScheduler()
     scheduler.start()
 
-    # Start the server
+    # Start server
     await start_server()
-    
-    # 4-minute heartbeat ping
+
+    # Heartbeat ping every 1 minute
     scheduler.add_job(lambda: asyncio.create_task(keep_server_alive()), 'interval', minutes=1)
 
-    # Keep the app alive
     while True:
         await asyncio.sleep(3600)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
