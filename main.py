@@ -51,7 +51,11 @@ Return ONLY JSON, no text."""
         except:
             intent = {"action": "chat"}
 
-        if intent[ = {
+        if intent["action"] in ASSISTANT_TOOLS:
+            tool_func = ASSISTANT_TOOLS[intent["action"]]
+            tool_result = await tool_func(access_token)
+
+            final_prompt = {
                 "role": "system",
                 "content": f"You are {given_name}'s Jarvis-like AI.\n"
                            f"User asked: '{message}'\n"
@@ -69,8 +73,7 @@ Return ONLY JSON, no text."""
 
     except Exception as e:
         return f"Error: {str(e)}"
-
-
+        
 
 # ===== HANDLERS =====
 async def device_handler(request: web.Request) -> web.WebSocketResponse:
