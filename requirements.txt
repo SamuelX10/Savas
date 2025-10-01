@@ -2,5 +2,3 @@ aiohttp
 httpx
 apscheduler
 python-dotenv
-google-auth
-google-auth-oauthlib
