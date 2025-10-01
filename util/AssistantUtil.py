@@ -1,8 +1,5 @@
-import os
 import httpx
-from typing import Dict, Any, Optional
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from typing import Dict, Any
 
 class AssistantUtil:
     BASE_TASKS_URL = "https://tasks.googleapis.com/tasks/v1/lists/@default/tasks"
